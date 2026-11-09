@@ -1,0 +1,47 @@
+# Local infrastructure. `docker compose up -d`, then `./mvnw spring-boot:run`.
+# `docker compose --profile app up -d --build` also runs the service itself in a container.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: partner_gateway
+      POSTGRES_USER: partner_gateway
+      POSTGRES_PASSWORD: partner_gateway
+    ports: ["5432:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U partner_gateway"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    ports: ["5672:5672", "15672:15672"]   # 15672 = management UI (guest/guest)
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+
+  app:
+    profiles: [app]
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/partner_gateway
+      REDIS_HOST: redis
+      RABBITMQ_HOST: rabbitmq
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+volumes:
+  postgres-data:
